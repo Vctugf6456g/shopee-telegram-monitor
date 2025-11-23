@@ -1,7 +1,7 @@
 import requests
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import traceback
 
@@ -12,6 +12,12 @@ class ShopeeMonitor:
         self.telegram_api = f"https://api.telegram.org/bot{telegram_bot_token}"
         self.state_file = "product_state.json"
         
+    def get_wib_time(self):
+        """Get current time in WIB (UTC+7)"""
+        utc_time = datetime.utcnow()
+        wib_time = utc_time + timedelta(hours=7)
+        return wib_time.strftime('%Y-%m-%d %H:%M:%S')
+    
     def load_state(self):
         """Load status produk terakhir"""
         try:
@@ -146,9 +152,11 @@ class ShopeeMonitor:
     
     def monitor_once(self, products):
         """Single monitoring check"""
+        wib_time = self.get_wib_time()
+        
         print(f"\n{'='*60}")
         print(f"🤖 Shopee Monitor - Railway.app")
-        print(f"⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        print(f"⏰ {wib_time} WIB")
         print(f"{'='*60}\n")
         
         state = self.load_state()
@@ -184,7 +192,7 @@ class ShopeeMonitor:
                         f"📦 <b>{info['name']}</b>\n"
                         f"💰 Rp {info['price']:,.0f}\n"
                         f"📊 Stok: {info['stock']} unit\n"
-                        f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
+                        f"🕐 {wib_time} WIB\n\n"
                         f"🔗 <a href='https://shopee.co.id/product/{shop_id}/{item_id}'>{'BELI SEKARANG!' if current_status else 'Lihat Produk'}</a>"
                     )
                     
@@ -200,7 +208,7 @@ class ShopeeMonitor:
                 if product_key in state:
                     new_state[product_key] = state[product_key]
             
-            print()
+            print()        
         
         self.save_state(new_state)
         print(f"{'='*60}\n")
@@ -210,15 +218,15 @@ class ShopeeMonitor:
         print(f"🚀 Starting continuous monitoring...")
         print(f"⏱️  Check interval: {interval} seconds ({interval//60} minutes)")
         print(f"📦 Products: {len(products)}")
-        print()
-        
+        print()        
         # Send startup notification
+        wib_time = self.get_wib_time()
         self.send_telegram(
             "🤖 <b>Shopee Monitor Started!</b>\n\n"
             f"✅ Railway.app deployment active\n"
             f"📦 Monitoring {len(products)} product(s)\n"
             f"⏱️  Interval: {interval//60} minutes\n"
-            f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+            f"🕐 {wib_time} WIB"
         )
         
         while True:
@@ -226,13 +234,14 @@ class ShopeeMonitor:
                 self.monitor_once(products)
                 
                 print(f"⏳ Waiting {interval} seconds until next check...")
-                print(f"⏰ Next check at: {datetime.utcnow().replace(second=0, microsecond=0).isoformat()}\n")
+                print(f"⏰ Next check in {interval//60} minutes\n")
                 
                 time.sleep(interval)
                 
             except KeyboardInterrupt:
                 print("\n🛑 Stopped by user")
-                self.send_telegram("🛑 <b>Bot Stopped</b>\n\nMonitoring dihentikan.")
+                wib_time = self.get_wib_time()
+                self.send_telegram(f"🛑 <b>Bot Stopped</b>\n\n🕐 {wib_time} WIB")
                 break
             except Exception as e:
                 print(f"\n❌ Error: {e}")
