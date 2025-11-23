@@ -42,7 +42,8 @@ class ShopeeMonitor:
         
     def get_wib_time(self):
         """Get current time in WIB (UTC+7)"""
-        utc_time = datetime.utcnow()
+        from datetime import timezone
+        utc_time = datetime.now(timezone.utc)
         wib_time = utc_time + timedelta(hours=7)
         return wib_time.strftime('%Y-%m-%d %H:%M:%S WIB')
     
