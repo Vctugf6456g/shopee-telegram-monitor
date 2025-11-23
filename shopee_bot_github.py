@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 import traceback
+import time
 
 class ShopeeMonitor:
     def __init__(self, telegram_bot_token, telegram_chat_id):
@@ -54,87 +55,209 @@ class ShopeeMonitor:
                 
         except Exception as e:
             print(f"❌ Error sending Telegram: {e}")
-            traceback.print_exc()
             return None
     
-    def check_product(self, shop_id, item_id):
-        """Cek status produk Shopee"""
+    def get_browser_headers(self):
+        """Generate realistic browser headers"""
+        return {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Referer': 'https://shopee.co.id/',
+            'Origin': 'https://shopee.co.id',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-Api-Source': 'pc',
+        }
+    
+    def check_product_web_scraping(self, shop_id, item_id):
+        """Alternatif: Scrape dari halaman web"""
         try:
+            print(f"   🌐 Method 2: Web scraping...")
+            
+            # Buka halaman produk langsung
+            url = f"https://shopee.co.id/api/v4/pdp/get_pc"
+            params = {
+                'shop_id': shop_id,
+                'item_id': item_id,
+            }
+            
+            headers = self.get_browser_headers()
+            
+            session = requests.Session()
+            
+            # First request to get cookies
+            print(f"   🍪 Getting cookies...")
+            session.get('https://shopee.co.id/', headers=headers, timeout=15)
+            time.sleep(2)
+            
+            # Second request with cookies
+            print(f"   📡 Fetching product data...")
+            response = session.get(url, params=params, headers=headers, timeout=15)
+            
+            print(f"   📊 Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'item' in data:
+                    item = data['item']
+                    
+                    name = item.get('name', 'Unknown')
+                    stock = item.get('stock', 0)
+                    price = item.get('price', 0) / 100000
+                    
+                    return {
+                        'name': name,
+                        'stock': stock,
+                        'price': price,
+                        'available': stock > 0
+                    }
+            
+            print(f"   ⚠️  Response: {response.text[:200]}")
+            
+        except Exception as e:
+            print(f"   ❌ Web scraping failed: {e}")
+        
+        return None
+    
+    def check_product_mobile_api(self, shop_id, item_id):
+        """Alternatif: Gunakan mobile API"""
+        try:
+            print(f"   📱 Method 3: Mobile API...")
+            
             url = "https://shopee.co.id/api/v4/item/get"
             params = {
                 'shopid': shop_id,
                 'itemid': item_id
             }
+            
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://shopee.co.id/',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
                 'Accept': 'application/json',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+                'Referer': 'https://shopee.co.id/',
+                'X-Requested-With': 'XMLHttpRequest',
             }
             
-            print(f"   🌐 Requesting Shopee API...")
-            print(f"   URL: {url}")
-            print(f"   Params: {params}")
+            response = requests.get(url, params=params, headers=headers, timeout=15)
             
-            response = requests.get(url, params=params, headers=headers, timeout=30)
-            
-            print(f"   📡 Response Status: {response.status_code}")
+            print(f"   📊 Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                
-                # Debug: Print raw response
-                print(f"   📄 Response keys: {list(data.keys())}")
-                
                 if 'data' in data and data['data']:
                     item = data['data']
-                    
-                    # Debug: Print item keys
-                    print(f"   🔑 Item keys: {list(item.keys())[:10]}...")
-                    
-                    product_name = item.get('name', 'Unknown Product')
-                    stock = item.get('stock', 0)
-                    price = item.get('price', 0) / 100000
-                    
-                    result = {
-                        'name': product_name,
-                        'stock': stock,
-                        'price': price,
-                        'available': stock > 0
+                    return {
+                        'name': item.get('name', 'Unknown'),
+                        'stock': item.get('stock', 0),
+                        'price': item.get('price', 0) / 100000,
+                        'available': item.get('stock', 0) > 0
                     }
-                    
-                    print(f"   ✅ Product data retrieved successfully")
-                    return result
-                    
-                elif 'error' in data:
-                    print(f"   ❌ Shopee API error: {data.get('error')}")
-                    print(f"   Error message: {data.get('error_msg', 'No message')}")
-                else:
-                    print(f"   ⚠️  No 'data' field in response")
-                    print(f"   Raw response: {json.dumps(data, indent=2)[:500]}")
-                    
-            else:
-                print(f"   ❌ HTTP Error {response.status_code}")
-                print(f"   Response: {response.text[:500]}")
-                
-        except requests.exceptions.Timeout:
-            print(f"   ⏱️  Request timeout")
-        except requests.exceptions.RequestException as e:
-            print(f"   ❌ Request error: {e}")
-        except Exception as e:
-            print(f"   ❌ Unexpected error: {e}")
-            traceback.print_exc()
             
+        except Exception as e:
+            print(f"   ❌ Mobile API failed: {e}")
+        
+        return None
+    
+    def check_product_html_scrape(self, shop_id, item_id):
+        """Alternatif: Parse HTML langsung"""
+        try:
+            print(f"   🔍 Method 4: HTML scraping...")
+            
+            url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
+            headers = self.get_browser_headers()
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                html = response.text
+                
+                # Cari JSON data di HTML
+                if '__INITIAL_STATE__' in html:
+                    start = html.find('__INITIAL_STATE__=') + len('__INITIAL_STATE__=')
+                    end = html.find('</script>', start)
+                    json_str = html[start:end].strip()
+                    
+                    # Clean JSON
+                    if json_str.endswith(';'):
+                        json_str = json_str[:-1]
+                    
+                    data = json.loads(json_str)
+                    
+                    # Navigate through the data structure
+                    if 'item' in data and 'models' in data['item']:
+                        item_data = list(data['item']['models'].values())[0]
+                        
+                        return {
+                            'name': item_data.get('name', 'Unknown'),
+                            'stock': item_data.get('stock', 0),
+                            'price': item_data.get('price', 0) / 100000,
+                            'available': item_data.get('stock', 0) > 0
+                        }
+            
+        except Exception as e:
+            print(f"   ❌ HTML scraping failed: {e}")
+        
+        return None
+    
+    def check_product(self, shop_id, item_id):
+        """Try multiple methods to get product info"""
+        
+        # Try Method 1: Standard API
+        try:
+            print(f"   🌐 Method 1: Standard API...")
+            url = "https://shopee.co.id/api/v4/item/get"
+            params = {'shopid': shop_id, 'itemid': item_id}
+            headers = self.get_browser_headers()
+            
+            response = requests.get(url, params=params, headers=headers, timeout=15)
+            print(f"   📊 Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'data' in data and data['data']:
+                    item = data['data']
+                    return {
+                        'name': item.get('name', 'Unknown'),
+                        'stock': item.get('stock', 0),
+                        'price': item.get('price', 0) / 100000,
+                        'available': item.get('stock', 0) > 0
+                    }
+        except:
+            pass
+        
+        # Try Method 2: PC API
+        result = self.check_product_web_scraping(shop_id, item_id)
+        if result:
+            return result
+        
+        # Try Method 3: Mobile API
+        result = self.check_product_mobile_api(shop_id, item_id)
+        if result:
+            return result
+        
+        # Try Method 4: HTML Scraping
+        result = self.check_product_html_scrape(shop_id, item_id)
+        if result:
+            return result
+        
+        print(f"   ❌ All methods failed")
         return None
     
     def monitor(self, products):
         """Monitor produk dan kirim notifikasi jika ada perubahan"""
-        print(f"🤖 GitHub Actions - Shopee Monitor v2.0")
+        print(f"🤖 GitHub Actions - Shopee Monitor v3.0")
         print(f"⏰ Runtime: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        print(f"📍 Timezone: UTC+0")
         print("=" * 60)
         
-        # Load previous state
         state = self.load_state()
         print(f"📂 Previous state: {state}")
         
@@ -145,93 +268,63 @@ class ShopeeMonitor:
             item_id = product['item_id']
             product_key = f"{shop_id}_{item_id}"
             
-            print(f"\n🔍 [{idx}/{len(products)}] Checking product: {product_key}")
-            print(f"   Shop ID: {shop_id}")
-            print(f"   Item ID: {item_id}")
+            print(f"\n🔍 [{idx}/{len(products)}] Checking: {product_key}")
             
-            # Check product
             info = self.check_product(shop_id, item_id)
             
             if info:
                 current_status = info['available']
                 previous_status = state.get(product_key)
                 
-                print(f"\n   📦 Name: {info['name']}")
-                print(f"   💰 Price: Rp {info['price']:,.0f}")
-                print(f"   📊 Stock: {info['stock']} units")
+                print(f"\n   ✅ Product found!")
+                print(f"   📦 {info['name']}")
+                print(f"   💰 Rp {info['price']:,.0f}")
+                print(f"   📊 Stock: {info['stock']}")
                 print(f"   {'✅ READY' if current_status else '❌ OUT OF STOCK'}")
-                print(f"   🔄 Previous status: {previous_status}")
-                print(f"   🔄 Current status: {current_status}")
                 
                 # Send notification if status changed
                 if previous_status is not None and previous_status != current_status:
-                    print(f"\n   🚨 STATUS CHANGED! Sending notification...")
-                    
-                    if current_status:
-                        emoji = "✅"
-                        status_text = "PRODUK READY!"
-                        stock_text = f"{info['stock']} unit"
-                    else:
-                        emoji = "❌"
-                        status_text = "PRODUK HABIS!"
-                        stock_text = "0 unit"
+                    print(f"\n   🚨 STATUS CHANGED!")
                     
                     message = (
-                        f"{emoji} <b>{status_text}</b>\n\n"
+                        f"{'✅' if current_status else '❌'} <b>{'PRODUK READY!' if current_status else 'PRODUK HABIS!'}</b>\n\n"
                         f"📦 <b>{info['name']}</b>\n"
-                        f"💰 Harga: Rp {info['price']:,.0f}\n"
-                        f"📊 Stok: {stock_text}\n"
+                        f"💰 Rp {info['price']:,.0f}\n"
+                        f"📊 {info['stock']} unit\n"
                         f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
-                        f"🔗 <a href='https://shopee.co.id/product/{shop_id}/{item_id}'>{'BELI SEKARANG!' if current_status else 'Lihat Produk'}</a>"
+                        f"🔗 <a href='https://shopee.co.id/product/{shop_id}/{item_id}'>Lihat Produk</a>"
                     )
                     
                     self.send_telegram(message)
-                    
-                elif previous_status is None:
-                    print(f"   ℹ️  First time checking, no notification sent")
-                    print(f"   💡 Next check will compare with current status")
-                else:
-                    print(f"   ℹ️  No status change, no notification needed")
                 
-                # Update state
                 new_state[product_key] = current_status
-                
             else:
-                print(f"   ❌ Failed to get product info")
-                # Keep previous state if failed
+                print(f"   ⚠️  Failed to get info, keeping old state")
                 if product_key in state:
                     new_state[product_key] = state[product_key]
+            
+            time.sleep(3)  # Delay between products
         
-        # Save new state
-        print(f"\n💾 Saving new state...")
         self.save_state(new_state)
         
         print("\n" + "=" * 60)
         print("✅ Monitoring completed!")
-        print(f"📊 Checked {len(products)} product(s)")
-        print(f"⏰ Next check: ~5 minutes (GitHub Actions schedule)")
         print("=" * 60)
 
 
 if __name__ == "__main__":
-    print("=" * 60)
     print("🚀 SHOPEE TELEGRAM MONITOR - GITHUB ACTIONS")
     print("=" * 60)
     
-    # Get from environment variables (GitHub Secrets)
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
     TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
     
-    print(f"\n🔐 Checking environment variables...")
-    print(f"   TELEGRAM_BOT_TOKEN: {'✅ Set' if TELEGRAM_BOT_TOKEN else '❌ Missing'}")
-    print(f"   TELEGRAM_CHAT_ID: {'✅ Set' if TELEGRAM_CHAT_ID else '❌ Missing'}")
+    print(f"🔐 Secrets: {'✅' if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID else '❌'}")
     
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("\n❌ ERROR: Environment variables not found!")
-        print("   Please check GitHub Secrets configuration")
+        print("❌ Missing credentials!")
         exit(1)
     
-    # Products to monitor
     PRODUCTS = [
         {
             'shop_id': '581472460',
@@ -239,13 +332,7 @@ if __name__ == "__main__":
         }
     ]
     
-    print(f"\n📋 Configuration:")
-    print(f"   Products to monitor: {len(PRODUCTS)}")
-    print(f"   Product: Suno AI Pro Plan")
-    print(f"   Shop ID: {PRODUCTS[0]['shop_id']}")
-    print(f"   Item ID: {PRODUCTS[0]['item_id']}")
-    print()
+    print(f"📦 Monitoring {len(PRODUCTS)} product(s)\n")
     
-    # Run monitor
     bot = ShopeeMonitor(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     bot.monitor(PRODUCTS)
