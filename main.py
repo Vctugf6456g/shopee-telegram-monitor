@@ -200,7 +200,7 @@ class ShopeeMonitor:
                 if product_key in state:
                     new_state[product_key] = state[product_key]
             
-            print()        
+            print()
         
         self.save_state(new_state)
         print(f"{'='*60}\n")
@@ -210,7 +210,8 @@ class ShopeeMonitor:
         print(f"🚀 Starting continuous monitoring...")
         print(f"⏱️  Check interval: {interval} seconds ({interval//60} minutes)")
         print(f"📦 Products: {len(products)}")
-        print()        
+        print()
+        
         # Send startup notification
         self.send_telegram(
             "🤖 <b>Shopee Monitor Started!</b>\n\n"
@@ -225,7 +226,7 @@ class ShopeeMonitor:
                 self.monitor_once(products)
                 
                 print(f"⏳ Waiting {interval} seconds until next check...")
-                print(f"⏰ Next check in {interval//60} minutes\n")
+                print(f"⏰ Next check at: {datetime.utcnow().replace(second=0, microsecond=0).isoformat()}\n")
                 
                 time.sleep(interval)
                 
