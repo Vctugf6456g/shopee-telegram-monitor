@@ -3,7 +3,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import traceback
 import logging
@@ -42,7 +42,6 @@ class ShopeeMonitor:
         
     def get_wib_time(self):
         """Get current time in WIB (UTC+7)"""
-        from datetime import timezone
         utc_time = datetime.now(timezone.utc)
         wib_time = utc_time + timedelta(hours=7)
         return wib_time.strftime('%Y-%m-%d %H:%M:%S WIB')
@@ -77,20 +76,25 @@ class ShopeeMonitor:
                 'disable_web_page_preview': False
             }
             
-            success = False
+            # Send message multiple times for priority alerts
             for attempt in range(repeat):
-                response = self.session.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
-                
-                if response.status_code == 200:
-                    logger.info(f"Telegram notification sent (attempt {attempt + 1}/{repeat})")
-                    success = True
-                    if attempt < repeat - 1:
-                        time.sleep(0.5)  # Brief delay between repetitions
-                else:
-                    logger.error(f"Telegram error: {response.status_code}")
+                try:
+                    response = self.session.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+                    
+                    if response.status_code == 200:
+                        logger.info(f"Telegram notification sent (attempt {attempt + 1}/{repeat})")
+                        if attempt < repeat - 1:
+                            time.sleep(0.5)  # Brief delay between repetitions
+                    else:
+                        logger.error(f"Telegram error: {response.status_code}")
+                        # Don't continue repeating if we get a bad status code
+                        return False
+                except Exception as e:
+                    logger.error(f"Error sending notification (attempt {attempt + 1}/{repeat}): {e}")
+                    # Don't continue repeating on exception
                     return False
             
-            return success
+            return True
                 
         except Exception as e:
             logger.error(f"Send error: {e}")
