@@ -1,1 +1,14 @@
-import os\nimport time\nimport requests\nfrom datetime import datetime, timedelta\n\n# Environment variables\nTELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')\nTELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')\nCHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 300))\n\n# Shopee product parameters\nSHOP_ID = 581472460\nITEM_ID = 28841260015\n\n# State management\nprevious_status = None\n\ndef send_telegram_message(message):\n    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'\n    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message}\n    requests.post(url, json=payload)\n\ndef get_product_info():\n    try:\n        url = f'https://shopee.sg/api/v2/item/get?item_id={ITEM_ID}&shop_id={SHOP_ID}'\n        response = requests.get(url)\n        response.raise_for_status()\n        return response.json()\n    except Exception as e:\n        print(f'Error fetching product info: {e}')\n        return None\n\ndef check_product_availability():\n    global previous_status\n    product_info = get_product_info()\n    if product_info and 'data' in product_info:\n        is_available = product_info['data']['item']['approval_status'] == '1'\n        if is_available and previous_status != 'in stock':\n            notify_price_change(product_info)\n            previous_status = 'in stock'\n        elif not is_available and previous_status != 'out of stock':\n            previous_status = 'out of stock'\n            send_telegram_message('The product is out of stock.')\n    else:\n        print('No product data available.')\n\ndef notify_price_change(product_info):\n    price = product_info['data']['item']['price'] / 100000\n    stock_level = product_info['data']['item']['stock']\n    urgency_indicator = '!!Urgent!!' if stock_level < 5 else 'In stock'\n    message = f'Product is available!\nPrice: ${price:.2f} \nStock Level: {urgency_indicator}\nDirect Checkout Link: https://shopee.sg/{SHOP_ID}/{ITEM_ID}'\n    for _ in range(3):  # Send 3 notifications for priority alerts\n        send_telegram_message(message)\n\ndef main():\n    startup_message = '''\n    Starting Shopee Monitor Bot...\n    Monitoring product availability for shop_id: {SHOP_ID} and item_id: {ITEM_ID}\n    Check interval: {CHECK_INTERVAL} seconds\n    Features: \n    - Telegram integration\n    - WIB timezone support\n    - Priority alerts\n    - Direct checkout links\n    - Stock urgency indicators\n    - API checking\n    - Error handling and retry logic\n    - State management\n    '''\n    send_telegram_message(startup_message)\n    while True:\n        check_product_availability()\n        time.sleep(CHECK_INTERVAL)\n\nif __name__ == '__main__':\n    main()
+{
+  "message": "  File \"/app/main.py\", line 1",
+  "attributes": {
+    "level": "error"
+  },
+  "tags": {
+    "project": "d00664c0-28db-4def-b903-582cd4c2a0b5",
+    "environment": "fb8d47f8-cf3d-4a1b-90d6-63ddad2ae61e",
+    "service": "c94b6bf5-af42-4206-9b83-155a058ebc2b",
+    "deployment": "78122bf0-a814-44d6-a059-356aa44ec873",
+    "replica": "75080b66-7b27-4a7a-b228-8344e87e06f7"
+  },
+  "timestamp": "2025-11-23T18:46:07.717718556Z"
+}
